@@ -1,0 +1,238 @@
+{
+    "name": "PL_MODE_DIMENSION_TMANALYTICS",
+    "properties": {
+        "activities": [
+            {
+                "name": "GetFileDetails_dim_mode",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "SqlDWSource",
+                        "sqlReaderQuery": {
+                            "value": "SELECT * FROM [TM_ANALYTICS].[FILE_TABLE_DTLS] WHERE SRC_SYS_ID='D4' AND LOADNG_LAYER='DIM_BRONZE_SILVER'",
+                            "type": "Expression"
+                        },
+                        "queryTimeout": "02:00:00",
+                        "partitionOption": "None"
+                    },
+                    "dataset": {
+                        "referenceName": "ds_syn_tmanalytics",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "SchemaName": "TM_ANALYTICS",
+                            "TableName": "FILE_TABLE_DTLS",
+                            "SqlPoolConnection": {
+                                "value": "@pipeline().parameters.SqlPoolConnection",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "name": "DF_STD_DIM_MODE_TMANALYTICS",
+                "type": "ExecuteDataFlow",
+                "dependsOn": [
+                    {
+                        "activity": "GetFileDetails_dim_mode",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "1.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataflow": {
+                        "referenceName": "DF_STD_DIM_MODE_TMANALYTICS",
+                        "type": "DataFlowReference",
+                        "parameters": {
+                            "SilverFolderPath": {
+                                "value": "'@{activity('GetFileDetails_dim_mode').output.firstRow.TGT_FILE_PATH}'",
+                                "type": "Expression"
+                            },
+                            "SilverContainer": {
+                                "value": "'@{activity('GetFileDetails_dim_mode').output.firstRow.CNTNR_NAME}'",
+                                "type": "Expression"
+                            },
+                            "ColumnName": {
+                                "value": "'@{activity('GetFileDetails_dim_mode').output.firstRow.addl_Col2}'",
+                                "type": "Expression"
+                            }
+                        },
+                        "datasetParameters": {
+                            "InputParquetFile": {
+                                "Filepath": {
+                                    "value": "@pipeline().parameters.FileFolderPath",
+                                    "type": "Expression"
+                                },
+                                "FileSystem": {
+                                    "value": "@pipeline().parameters.FileSystem",
+                                    "type": "Expression"
+                                },
+                                "FileName": {
+                                    "value": "@pipeline().parameters.FileName",
+                                    "type": "Expression"
+                                },
+                                "StorageUrl": {
+                                    "value": "@pipeline().parameters.AccoutUrl",
+                                    "type": "Expression"
+                                },
+                                "StorageAccountKey": {
+                                    "value": "@pipeline().parameters.StorageKey",
+                                    "type": "Expression"
+                                }
+                            },
+                            "ModeXrefTable": {
+                                "SchemaName": {
+                                    "value": "@activity('GetFileDetails_dim_mode').output.firstRow.SCHEMA_NAME",
+                                    "type": "Expression"
+                                },
+                                "TableName": {
+                                    "value": "@activity('GetFileDetails_dim_mode').output.firstRow.addl_Col1",
+                                    "type": "Expression"
+                                },
+                                "SqlPoolConnection": {
+                                    "value": "@pipeline().parameters.SqlPoolConnection",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    },
+                    "staging": {
+                        "linkedService": {
+                            "referenceName": "LS_DELTA_TMAnalytics",
+                            "type": "LinkedServiceReference"
+                        },
+                        "folderPath": "tmanalytics/Staging"
+                    },
+                    "integrationRuntime": {
+                        "referenceName": "DataflowIntegrationRuntime",
+                        "type": "IntegrationRuntimeReference"
+                    },
+                    "traceLevel": "Fine"
+                }
+            },
+            {
+                "name": "DF_MODE_DIM_INCREMENTAL",
+                "type": "ExecuteDataFlow",
+                "dependsOn": [
+                    {
+                        "activity": "DF_STD_DIM_MODE_TMANALYTICS",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "1.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataflow": {
+                        "referenceName": "DF_MODE_DIM_INCREMENTAL",
+                        "type": "DataFlowReference",
+                        "parameters": {
+                            "DeltaFileSystem": {
+                                "value": "'@{activity('GetFileDetails_dim_mode').output.firstRow.CNTNR_NAME}'",
+                                "type": "Expression"
+                            },
+                            "DeltaModeFilePath": {
+                                "value": "'@{activity('GetFileDetails_dim_mode').output.firstRow.TGT_FILE_PATH}'",
+                                "type": "Expression"
+                            }
+                        },
+                        "datasetParameters": {
+                            "sourceSQLPOOL": {
+                                "SchemaName": {
+                                    "value": "@activity('GetFileDetails_dim_mode').output.firstRow.SCHEMA_NAME",
+                                    "type": "Expression"
+                                },
+                                "TableName": {
+                                    "value": "@activity('GetFileDetails_dim_mode').output.firstRow.TRG_FILE_TBL_NAME",
+                                    "type": "Expression"
+                                },
+                                "SqlPoolConnection": {
+                                    "value": "@pipeline().parameters.SqlPoolConnection",
+                                    "type": "Expression"
+                                }
+                            },
+                            "sinkSQLPOOL": {
+                                "SchemaName": {
+                                    "value": "@activity('GetFileDetails_dim_mode').output.firstRow.SCHEMA_NAME",
+                                    "type": "Expression"
+                                },
+                                "TableName": {
+                                    "value": "@activity('GetFileDetails_dim_mode').output.firstRow.TRG_FILE_TBL_NAME",
+                                    "type": "Expression"
+                                },
+                                "SqlPoolConnection": {
+                                    "value": "@pipeline().parameters.SqlPoolConnection",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    },
+                    "staging": {
+                        "linkedService": {
+                            "referenceName": "LS_DELTA_TMAnalytics",
+                            "type": "LinkedServiceReference"
+                        },
+                        "folderPath": "tmanalytics/Staging"
+                    },
+                    "integrationRuntime": {
+                        "referenceName": "DataflowIntegrationRuntime",
+                        "type": "IntegrationRuntimeReference"
+                    },
+                    "traceLevel": "Fine"
+                }
+            }
+        ],
+        "parameters": {
+            "FileName": {
+                "type": "string"
+            },
+            "FileFolderPath": {
+                "type": "string"
+            },
+            "SqlPoolConnection": {
+                "type": "string"
+            },
+            "AccoutUrl": {
+                "type": "string"
+            },
+            "StorageKey": {
+                "type": "string"
+            },
+            "SRC_SYS_ID": {
+                "type": "string"
+            },
+            "FileSystem": {
+                "type": "string"
+            }
+        },
+        "folder": {
+            "name": "GQO_Analytics/TMAnalytics"
+        },
+        "annotations": []
+    }
+}
